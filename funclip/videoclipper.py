@@ -232,8 +232,10 @@ class VideoClipper():
             srt_clip, _, srt_index = generate_srt_clip(sentences, start/16000.0, end/16000.0, begin_index=srt_index, time_acc_ost=time_acc_ost)
             clip_srt += srt_clip
             # Each later region is appended after the audio already concatenated,
-            # so its subtitles start at that output time, not at zero.
-            time_acc_ost += (end - start) / 16000.0
+            # so its subtitles start at that output time, not at zero. Count the
+            # samples actually appended: offsets can clamp a region to start > end,
+            # which appends nothing.
+            time_acc_ost += len(data[start:end]) / 16000.0
             for _ts in ts[1:]:  # multiple sentence input or multiple output matched
                 start, end = _ts
                 start = min(max(0, start+start_ost*16), len(data))
@@ -242,7 +244,7 @@ class VideoClipper():
                 res_audio = np.concatenate([res_audio, data[start:end]], -1)
                 srt_clip, _, srt_index = generate_srt_clip(sentences, start/16000.0, end/16000.0, begin_index=srt_index-1, time_acc_ost=time_acc_ost)
                 clip_srt += srt_clip
-                time_acc_ost += (end - start) / 16000.0
+                time_acc_ost += len(data[start:end]) / 16000.0
         if len(ts):
             message = "{} periods found in the speech: ".format(len(ts)) + start_end_info + log_append
         else:

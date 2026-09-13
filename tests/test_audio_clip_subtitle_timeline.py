@@ -60,6 +60,66 @@ class TestAudioClipSubtitleTimeline(unittest.TestCase):
         self.assertEqual(len(audio), 16000)
         self.assertEqual(CUE_TIMES.findall(subtitles), [("00:00:00,000", "00:00:01,000")])
 
+    def clip_with(self, sentences, seconds, *args, **kwargs):
+        state = {
+            "audio_input": (16000, np.zeros(16000 * seconds)),
+            "recog_res_raw": "",
+            "timestamp": [],
+            "sentences": sentences,
+            "sd_sentences": copy.deepcopy(sentences),
+        }
+        return VideoClipper(None).clip(*args, state=state, **kwargs)
+
+    def test_region_emptied_by_start_offset_does_not_shift_later_subtitles(self):
+        # start_ost=1500ms turns the first region into 2.5-2.0s (nothing appended);
+        # the second contributes 5.5-7.0s, so "world" (6-7s) sits at 0.5-1.5s.
+        sentences = [
+            {"text": "hello", "timestamp": [[1000, 2000]], "spk": 0},
+            {"text": "world", "timestamp": [[6000, 7000]], "spk": 0},
+        ]
+        (_, audio), _, subtitles = self.clip_with(
+            sentences, 8, None, 1500, 0, timestamp_list=[[16000, 32000], [64000, 112000]]
+        )
+
+        self.assertEqual(len(audio), 24000)
+        self.assertEqual(CUE_TIMES.findall(subtitles), [("00:00:00,500", "00:00:01,500")])
+
+    def test_middle_region_emptied_by_start_offset_adds_no_time(self):
+        # start_ost=1000ms: the first region becomes 1-3s, the middle one 5-4.5s
+        # (start > end, nothing appended) and the last 7-8s.
+        sentences = [
+            {"text": "one", "timestamp": [[2000, 2800]], "spk": 0},
+            {"text": "two", "timestamp": [[7200, 7800]], "spk": 0},
+        ]
+        (_, audio), _, subtitles = self.clip_with(
+            sentences,
+            8,
+            None,
+            1000,
+            0,
+            timestamp_list=[[0, 48000], [64000, 72000], [96000, 128000]],
+        )
+
+        self.assertEqual(len(audio), 48000)
+        self.assertEqual(
+            CUE_TIMES.findall(subtitles),
+            [("00:00:01,000", "00:00:01,800"), ("00:00:02,200", "00:00:02,800")],
+        )
+
+    def test_end_offset_clamped_to_audio_length(self):
+        # end_ost=2000ms extends the first region to 0-3s and would push the
+        # second past the 4s input; it is clamped to 3-4s.
+        sentences = [
+            {"text": "one", "timestamp": [[0, 1000]], "spk": 0},
+            {"text": "two", "timestamp": [[3000, 4000]], "spk": 0},
+        ]
+        (_, audio), _, subtitles = self.clip_with(
+            sentences, 4, None, 0, 2000, timestamp_list=[[0, 16000], [48000, 64000]]
+        )
+
+        self.assertEqual(len(audio), 64000)
+        self.assertEqual(CUE_TIMES.findall(subtitles)[-1], ("00:00:03,000", "00:00:04,000"))
+
 
 if __name__ == "__main__":
     unittest.main()
