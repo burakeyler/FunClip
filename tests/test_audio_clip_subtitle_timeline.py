@@ -120,6 +120,27 @@ class TestAudioClipSubtitleTimeline(unittest.TestCase):
         self.assertEqual(len(audio), 64000)
         self.assertEqual(CUE_TIMES.findall(subtitles)[-1], ("00:00:03,000", "00:00:04,000"))
 
+    def test_accumulated_offset_does_not_lose_a_millisecond_to_float_sums(self):
+        # 114240 + 105600 samples is exactly 13.74s, but 7.14 + 6.6 in floats is
+        # 13.739999..., which the millisecond formatter truncated to 13.739s.
+        seconds = 20
+        sentences = [
+            {"text": "a", "timestamp": [[0, 7140]], "spk": 0},
+            {"text": "b", "timestamp": [[8000, 14600]], "spk": 0},
+            {"text": "c", "timestamp": [[15000, 16000]], "spk": 0},
+        ]
+        (_, audio), _, subtitles = self.clip_with(
+            sentences,
+            seconds,
+            None,
+            0,
+            0,
+            timestamp_list=[[0, 114240], [128000, 233600], [240000, 256000]],
+        )
+
+        self.assertEqual(len(audio), 114240 + 105600 + 16000)
+        self.assertEqual(CUE_TIMES.findall(subtitles)[2], ("00:00:13,740", "00:00:14,740"))
+
 
 if __name__ == "__main__":
     unittest.main()
